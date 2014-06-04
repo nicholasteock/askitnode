@@ -1,0 +1,11 @@
+{
+	"name": "askitnode",
+	"description": "REST API for askit",
+	"version": "4.0.1",
+	"private": true,
+	"dependencies": {
+		"express": "~4.0.0",
+		"mysql": "0.9.x",
+		"body-parser": "~1.0.1"
+	}
+}
