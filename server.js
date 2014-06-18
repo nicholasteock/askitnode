@@ -3,65 +3,104 @@
 // Base Setup
 
 // Call required packages
-var mysql = require('mysql');
-var express = require('express');
-var app = express();
-var router = express.Router();
-var bodyParser = require('body-parser');
+
+var express 		= require('express'),
+	app 			= express(),
+	router 			= express.Router(),
+	bodyParser 		= require('body-parser'),
+	async 			= require('async'),
+	globals 		= require('globals'),
+	authenticate 	= require('authenticate'),
+	users 			= require('users');
 
 // Configure app to use bodyParser()
 // Allows us to get the data from a POST
 app.use(bodyParser());
 
 // Set port
-var port = process.env.PORT || 8080;
+var port = process.env.PORT || globals.port_default;
 
 // Routes for API
 router.get('/', function(req, res) {
 	res.json({ message: "HELLO FROM THE API!" });
 });
 
+/***AUTHENTICATION************************************************************/
+
+router.post('/login', function( req, res ) {
+	async.series([
+		function( callback ) {
+			authenticate.login( req.body, callback );
+		}
+	], function( err, results ) {
+		res.send( results[0] );
+	});
+});
+
+router.post('/logout', function( req, res ) {
+	async.series([
+		function( callback ) {
+			authenticate.logout( req.body, callback );
+		}
+	], function( err, results ) {
+		res.send( results[0] );
+	});
+});
+
 /***USERS*********************************************************************/
 
 router.get('/users', function( req, res ) {
-	var queryString = 'SELECT * FROM user WHERE accessToken="' + req.query.access_token + '"';
-
-	var connection = mysql.createConnection({
-		host: 'askitdb.cvumcgqvkpk0.us-west-2.rds.amazonaws.com',
-		user: 'nicholasteo',
-		password: 'nicholasteo',
-		database: 'askitdb',
-		port: 3306
+	async.series([
+		function( callback ) {
+			users.profile( req.query, callback );
+		}
+	], function( err, results ) {
+		res.send( results );
 	});
+});
 
-	connection.connect();
-	connection.query( queryString, function( err, rows ) {
-		var response = { result: "", data: {} };
-
-		if( err ) {
-			response.result = "failure";
-			response.error = "Query returned error.";
-			res.send(response);
+router.post('/users', function( req, res ) {
+	// If profile does not throw error means username has been taken
+	async.series([
+		function( callback ) {
+			users.profile( req.body, callback );
+		}
+	], function( err, results ) {
+		if( !err ) {
+			var response = {
+				result: 'failure',
+				error: 'Email already registered.'
+			}
+			res.send( response );
 		}
 		else {
-			response.result = "success";
-			response.data = rows;
-			res.send(response);
+			// Proceed with registration
+			async.series([
+				function( callback ) {
+					users.register( req.body, callback );
+				}
+			], function( err, results ) {
+				if( err ) {
+					res.send( results[0] );
+				}
+				else {
+					async.series([
+						function( callback ) {
+							authenticate.login( req.body, callback );
+						}
+					], function( err, results ) {
+						res.send( results[0] );
+					});
+				}
+			});
 		}
 	});
-	connection.end();
-})
+});
 
 /***QUESTIONS*****************************************************************/
 
 router.get('/questions', function(req, res) {
-	var connection = mysql.createConnection({
-		host: 'askitdb.cvumcgqvkpk0.us-west-2.rds.amazonaws.com',
-		user: 'nicholasteo',
-		password: 'nicholasteo',
-		database: 'askitdb',
-		port: 3306
-	});
+	var connection = mysql.createConnection(globals.db_params);
 
 	connection.connect();
 	connection.query( 'SELECT * FROM question WHERE author=2', function( err, rows ) {
@@ -85,13 +124,7 @@ router.get('/questions', function(req, res) {
 /***ANSWERS*******************************************************************/
 
 router.get('/answers', function( req, res ) {
-	var connection = mysql.createConnection({
-		host: 'askitdb.cvumcgqvkpk0.us-west-2.rds.amazonaws.com',
-		user: 'nicholasteo',
-		password: 'nicholasteo',
-		database: 'askitdb',
-		port: 3306
-	});
+	var connection = mysql.createConnection(globals.db_params);
 
 	connection.connect();
 	connection.query( 'SELECT * FROM answer WHERE author=2', function( err, rows ) {
